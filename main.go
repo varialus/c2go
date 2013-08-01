@@ -45,18 +45,23 @@ License: BSD
 package main
 
 import (
-	"github.com/varialus/bsd/temporary_translation_utilities"
+	"fmt"
 )
 
 func main() {
 
-	REPLACEMENT_FUNCTIONS := map[string]string{
+}
+
+func REPLACEMENT_FUNCTIONS() map[string]string {
+	return map[string]string {
 		"stat": "syscall.Stat",
 		"access": "syscall.Access",
 		"rand": "rand.Float64",
 	}
+}
 
-	REPLACEMENT_TYPES := map[string]string{
+func REPLACEMENT_TYPES() map[string]string {
+	return map[string]string{
 		"static struct stat": "syscall.Stat_t",
 		"struct timeval": "syscall.Timeval",
 		"char *": "CString",
@@ -80,19 +85,25 @@ func main() {
 		"static long": "int",
 		"static int": "int",
 	}
+}
 
-	REPLACEMENT_MACROS := map[string][3]string{
+func REPLACEMENT_MACROS() map[string][3]string {
+	return map[string][3]string{
 		"S_ISDIR" : [3]string{"syscall", "(((", ") & syscall.S_IFMT) == syscall.S_IFDIR)"},
 	}
+}
 
-	REPLACEMENT_DEFS := map[string]int{
+func REPLACEMENT_DEFS() map[string]int {
+	return map[string]int{
 		"F_OK" : 0,
 		"X_OK" : 1,
 		"W_OK" : 2,
 		"R_OK" : 4,
 	}
+}
 
-	CUSTOM_FUNCTIONS := map[string][2]string{
+func CUSTOM_FUNCTIONS() map[string][2]string {
+	return map[string][2]string{
 		"atoi":   [2]string{"strconv",  "func atoi(a string) int {\n\tv, _ := strconv.Atoi(a)\n\treturn v\n}"},
 		"sleep":  [2]string{"time",     "func sleep(sec int64) {\n\ttime.Sleep(1e9 * sec)\n}"},
 		"getchar":[2]string{"fmt",      "func getchar() byte {\n\tvar b byte\n\tfmt.Scanf(\"%c\", &b)\n\treturn b\n}"},
@@ -105,10 +116,14 @@ func main() {
 		"scanf":  [2]string{"fmt",      "func scanf(format CString, a ...interface{}) {\n\tfmt.Scanf(format.ToString(), a...)\n}"},
 		"b2i":    [2]string{"",         "func b2i(b bool) int {\n\tif b{\n\t\treturn 1\n\t}\n\treturn 0\n}"},
 	}
+}
 
-	SKIP_INCLUDES := [1]string{"CString"}
+func SKIP_INCLUDES() [1]string {
+	return [1]string{"CString"}
+}
 
-	WHOLE_PROGRAM_REPLACEMENTS := map[string]string{
+func WHOLE_PROGRAM_REPLACEMENTS() map[string]string {
+	return map[string]string{
 		"'fmt.Printf(\"\n\")": "fmt.Println()",
 		"func main(argc int, argv *[]CString) int {": "func main() {\n\tflag.Parse()\n\targv := flag.Args()\n\targc := len(argv)+1\n",
 		"argv[": "argv[-1+",
@@ -121,13 +136,48 @@ func main() {
 		"'\\0'": "'\\x00'",
 		"int = 0\n": "int\n",
 	}
+}
 
-	temporary_translation_utilities.Use_vars_so_compiler_does_not_complain(
-		REPLACEMENT_FUNCTIONS,
-		REPLACEMENT_TYPES,
-		REPLACEMENT_MACROS,
-		REPLACEMENT_DEFS,
-		CUSTOM_FUNCTIONS,
-		SKIP_INCLUDES,
-		WHOLE_PROGRAM_REPLACEMENTS)
+type GoGenerator struct {
+	Output string
+
+	// Statements start with indentation of self.indent_level spaces, using
+	// the _make_indent method
+	//
+	Indent_level int
+	Imports []string
+	// in main()
+	Inmain bool
+	// scopeless declarations
+	Vartypes []interface{}
+	// function name for the current function
+	Current_function_name string
+	// some functions should return bool instead of int
+	Should_return_bool_instead_of_int []interface{}
+	// custom functions that has been used
+	Used_custom_functions []interface{}
+	// variables that has to be renamed
+	Renames map[interface{}]interface{}
+}
+
+func (g GoGenerator) make_packagename() string {
+	return "package main\n\n"
+}
+
+func (g GoGenerator) make_imports() string {
+	s := "import (\n"
+	import_in_SKIP_INCLUDES := false
+	for _, imp := range g.Imports {
+		for _, skip_include := range SKIP_INCLUDES() {
+			if imp == skip_include {
+				import_in_SKIP_INCLUDES = true
+			}
+		}
+		if imp != "" && !import_in_SKIP_INCLUDES {
+			s += fmt.Sprintf("  \"%s\"\n", imp)
+		}
+		import_in_SKIP_INCLUDES = false
+	}
+	s += ")\n\n"
+	return s
 }
